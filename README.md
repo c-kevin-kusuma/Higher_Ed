@@ -1,1 +1,516 @@
-# Higher_Ed
+---
+title: "Planned Giving Donor Model Comparison"
+author: "Kevin Kusuma"
+date: "6/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(janitor)
+library(ROSE)
+library(smotefamily)
+library(caTools)
+library(DomoR)
+
+data_ori <- read_csv("PG 20180630 Merged with EASI_Ready for Analysis CSV.csv")
+# Data Filters Applied
+data_ready <- data_ori %>% 
+  filter(`Current Record Status`!='D', Age>=40,
+         `Total U gifts`>1, 
+         `Household Rating`!=0, 
+         `Record Type 1 (Primary)`!= 'Student', 
+         `Record Type 1 (Primary)`!= 'Former Student',
+         `Latest U Gift Age`>=18, 
+         is.na(`Household Rating`)==FALSE) %>% 
+  clean_names("snake")
+
+data_kev <- data_ready %>% 
+  mutate(pg_donor = factor(ifelse(pg_donor==1,'Yes','No'), levels = c('Yes','No')),
+         age_group = factor(floor(age/10)*10),
+         address_sl25 = factor(address_sl25),
+         has_attended_student_act = factor(has_attended_student_act),
+         revieved_any_awards_honors = factor(revieved_any_awards_honors),
+         former_uu_payroll_deduction = factor(former_uu_payroll_deduction),
+         sports_participation = factor(sports_participation),
+         greek_participation = factor(greek_participation),
+         has_made_phonathon_pledge = factor(has_made_phonathon_pledge),
+         presidents_club_current = factor(presidents_club_current),
+         presidents_club_former = factor(presidents_club_former),
+         crimson_club_member_current = factor(crimson_club_member_current),
+         crimson_club_member_ever = factor(crimson_club_member_ever),
+         any_committee_participation = factor(any_committee_participation),
+         gender= factor(gender),
+         has_attended_activities = factor(has_attended_activities),
+         has_multiple_properties = factor(has_multiple_properties),
+         multiple_u_degrees = factor(multiple_u_degrees),
+         undergrad_degree = factor(undergrad_degree),
+         has_any_u_contact_reports = factor(has_any_u_contact_reports),
+         project_management_team = factor(project_management_team),
+         marital_status_description = factor(marital_status_description),
+         both_entity_and_spouse_u_alum = factor(both_entity_and_spouse_u_alum),
+         has_direct_family_u_alum = factor(has_direct_family_u_alum),
+         latest_u_gift_amount_group = floor(latest_u_gift_amount/100)*100,
+         uu_years_of_giving_group = floor(uu_years_of_giving/10)*10,
+         number_of_u_degrees_group = floor(number_of_u_degrees/10)*10,
+         num_of_activities_attended_group = floor(num_of_activities_attended/10)*10,
+         total_u_gifts_group = floor(total_u_gifts/100)*100,
+         average_u_gift_5_yr_group = floor(average_u_gift_5_yr/100)*100,
+         latest_u_gift_age_group = floor(latest_u_gift_age/10)*10,
+         average_u_gift_group = floor(average_u_gift/100)*100,
+         years_latest_u_gift_group = floor(years_latest_u_gift/10)*10,
+         years_earliest_u_gift_group = floor(years_earliest_u_gift/10)*10,
+         number_of_children,
+         number_u_contact_reports_5_yr,
+         num_of_acts_attended_5_yr,
+         has_any_gifts_by_credit_card = factor(has_any_gifts_by_credit_card),
+         has_phone_handling = factor(has_phone_handling),
+         parent_of_u_alum = factor(parent_of_u_alum),
+         child_of_u_alum = factor(child_of_u_alum),
+         total_u_gift_count_group = floor(total_u_gift_count/10)*10,
+         total_u_gift_count_5_yr_group = floor(total_u_gift_count_5_yr/10)*10) %>%
+  select(pg_donor,
+         average_u_gift_group,
+         years_latest_u_gift_group,
+         years_earliest_u_gift_group,
+         number_of_children,
+         number_u_contact_reports_5_yr,
+         num_of_acts_attended_5_yr,
+         has_any_gifts_by_credit_card,
+         has_phone_handling,
+         latest_u_gift_age_group,
+         has_attended_student_act,
+         revieved_any_awards_honors,
+         former_uu_payroll_deduction,
+         sports_participation,
+         greek_participation,
+         has_made_phonathon_pledge,
+         has_attended_activities,
+         crimson_club_member_current,
+         crimson_club_member_ever,
+         presidents_club_current,
+         presidents_club_former,
+         any_committee_participation,
+         project_management_team,
+         age_group,
+         any_mailing_list,
+         marital_status_description,
+         both_entity_and_spouse_u_alum,
+         household_rating,
+         has_any_u_contact_reports,
+         number_u_contact_reports,
+         uu_years_of_giving_group,
+         has_direct_family_u_alum,
+         gender,
+         latest_u_gift_amount_group,
+         average_u_gift_5_yr_group,
+         record_type_1_primary,
+         degree_school_1,
+         number_of_u_degrees_group,
+         num_of_activities_attended_group,
+         total_u_gifts_group,
+         has_children,
+         address_sl25,
+         degree_department_1,
+         wpot_rating,
+         undergrad_degree,
+         masters_degree,
+         doctorate_degree,
+         has_multiple_properties,
+         has_direct_family_u_alum,
+         total_u_gift_count_group,
+         total_u_gift_count_5_yr_group,
+         num_of_student_acts_attended,
+         number_u_contact_reports_5_yr,
+         number_u_contact_reports_10_yr) %>% 
+  na.omit()
+
+data_kev_1 <- dummyVars(pg_donor~., data = data_kev, fullRank = T) %>% 
+  predict(newdata=data_kev)
+
+data_kev_2 <- data_kev_1[ , -nzv(data_kev_1)]
+
+data_kev_nzv <- data_kev_1[ , nzv(data_kev_1)]
+
+data_kev_df1 <- data.frame(data_kev_2)
+data_kev_df2 <- data.frame(data_kev_nzv)
+
+data_kev_df1$pg_donor <- data_kev$pg_donor
+data_kev_df1$project_management_team.1 <- data_kev_df2$project_management_team.1
+data_kev_df1$num_of_activities_attended_group <- data_kev_df2$num_of_activities_attended_group
+data_kev_df1 <- data_kev_df1 %>% 
+  select(-degree_department_1Law)
+
+# UOS
+set.seed(212)
+partition_kev <- createDataPartition(data_kev_df1$pg_donor, p=0.7, list = F)
+train_kev <- data_kev_df1[partition_kev, ]
+test_kev <- data_kev_df1[-partition_kev, ]
+
+n_new <- train_kev %>% 
+  filter(pg_donor=='No') %>% 
+  nrow()
+
+set.seed(212)
+UOS <- ovun.sample(pg_donor~.,
+                           data = train_kev,
+                           method = "both",
+                           N = n_new,
+                           p = 0.5,
+                           seed = 212)
+uos_data <- UOS$data
+
+# SMOTE
+set.seed(212)
+UOS_U <- ovun.sample(pg_donor~.,
+                           data = train_kev,
+                           method = "under",
+                           N = 1650,
+                           seed = 212)
+uos_U <- UOS_U$data
+
+set.seed(212)
+smote_result <- SMOTE(X = uos_U[,-58],
+                      target = uos_U$pg_donor,
+                      K = 4,
+                      dup_size = 9)
+smote_data = smote_result$data %>% 
+  mutate(pg_donor = factor(class, levels = c('Yes','No'))) %>% 
+  select(-class)
+
+set.seed(212)
+logistic_uos <- train(pg_donor~.,
+                        uos_data,
+                        method = "glm",
+                        metric = "Sens",
+                        trControl = trainControl(
+                          method = "cv",
+                          number = 10,
+                          summaryFunction = twoClassSummary,
+                          classProbs = T,
+                          verboseIter = T),
+                        preProcess= c("center", "scale"))
+pred_log <- predict(logistic_uos, test_kev, type = "prob")
+
+set.seed(212)
+logistic_smt <- train(pg_donor~.,
+                        smote_data,
+                        method = "glm",
+                        metric = "Sens",
+                        trControl = trainControl(
+                          method = "cv",
+                          number = 10,
+                          summaryFunction = twoClassSummary,
+                          classProbs = T,
+                          verboseIter = T),
+                        preProcess= c("center", "scale"))
+pred_log_smt <- predict(logistic_smt, test_kev, type = "prob")
+
+rf_tuning <- data.frame(mtry = 28,
+                        splitrule = "extratrees",
+                        min.node.size = 10)
+
+set.seed(212)
+rf_uos <- train(pg_donor~.,
+                  uos_data,
+                  method = "ranger",
+                  metric= "Sens",
+                  tuneGrid = rf_tuning,
+                  importance = "permutation",
+                  trControl = trainControl(
+                    method = "cv",
+                    number = 10,
+                    summaryFunction = twoClassSummary,
+                    classProbs = T,
+                    verboseIter = T),
+                  preProcess = c('center','scale'))
+pred_rf <- predict(rf_uos, test_kev, type = "prob")
+
+rf_tuning_smt <- data.frame(mtry = 2,
+                        splitrule = "extratrees",
+                        min.node.size = 10)
+set.seed(212)
+rf_smt <- train(pg_donor~.,
+                  smote_data,
+                  method = "ranger",
+                  metric= "Sens",
+                  tuneGrid = rf_tuning_smt,
+                  importance = "permutation",
+                  trControl = trainControl(
+                    method = "cv",
+                    number = 10,
+                    summaryFunction = twoClassSummary,
+                    classProbs = T,
+                    verboseIter = T),
+                  preProcess = c('center','scale'))
+pred_rf_smt <- predict(rf_smt, test_kev, type = "prob")
+
+gbmGrid <-  expand.grid(interaction.depth = 5, 
+                        n.trees = 1500, 
+                        shrinkage = 0.1,
+                        n.minobsinnode = 20)
+
+set.seed(212)
+gbm_uos <- train(pg_donor~.,
+                  uos_data,
+                  method = "gbm",
+                  metric= "Sens",
+                  tuneGrid = gbmGrid,
+                  trControl = trainControl(
+                    method = "cv",
+                    number = 10,
+                    summaryFunction = twoClassSummary,
+                    classProbs = T,
+                    verboseIter = T),
+                  preProcess = c('center','scale'))
+pred_gbm <- predict(gbm_uos, test_kev, type = "prob")
+
+gbmGrid_smt <-  expand.grid(interaction.depth = 3, 
+                        n.trees = 50, 
+                        shrinkage = 0.1,
+                        n.minobsinnode = 10)
+
+set.seed(212)
+gbm_smt <- train(pg_donor~.,
+                  smote_data,
+                  method = "gbm",
+                  metric= "Sens",
+                  tuneGrid = gbmGrid_smt,
+                  trControl = trainControl(
+                    method = "cv",
+                    number = 10,
+                    summaryFunction = twoClassSummary,
+                    classProbs = T,
+                    verboseIter = T),
+                  preProcess = c('center','scale'))
+pred_gbm_smt <- predict(gbm_smt, test_kev, type = "prob")
+
+data_2017 <- fetch('5b6770ae-ca9c-40da-9b49-7288d6cb8729')
+data_2017 <- data_2017 %>% 
+  clean_names("snake") 
+
+data_2017_ready <- data_2017 %>%
+  mutate(pg_donor = factor(ifelse(pg_donor==1,'Yes','No'), levels = c('Yes','No')),
+         age_group = factor(floor(as.numeric(ifelse(age=='NA',NA,age))/10)*10),
+         address_sl25 = factor(address_sl25),
+         has_attended_student_act = factor(has_attended_student_act),
+         revieved_any_awards_honors = factor(revieved_any_awards_honors),
+         former_uu_payroll_deduction = factor(former_uu_payroll_deduction),
+         sports_participation = factor(sports_participation),
+         greek_participation = factor(greek_participation),
+         has_made_phonathon_pledge = factor(has_made_phonathon_pledge),
+         presidents_club_current = factor(president_s_club_current),
+         presidents_club_former = factor(president_s_club_former),
+         crimson_club_member_current = factor(crimson_club_member_current),
+         crimson_club_member_ever = factor(crimson_club_member_ever),
+         any_committee_participation = factor(any_committee_participation),
+         gender= factor(gender),
+         household_rating = as.numeric(ifelse(household_rating=='NA',NA,household_rating)),
+         has_attended_activities = factor(has_attended_activities),
+         has_multiple_properties = factor(has_multiple_properties),
+         multiple_u_degrees = factor(multiple_u_degrees),
+         undergrad_degree = factor(undergrad_degree),
+         has_any_u_contact_reports = factor(has_any_u_contact_reports),
+         project_management_team = factor(project_management_team),
+         marital_status_description = factor(marital_status_description),
+         both_entity_and_spouse_u_alum = factor(both_entity_and_spouse_u_alum),
+         has_direct_family_u_alum = factor(has_direct_family_u_alum),
+         latest_u_gift_amount_group = floor(latest_u_gift_amount/100)*100,
+         uu_years_of_giving_group = floor(uu_years_of_giving/10)*10,
+         number_of_u_degrees_group = floor(number_of_u_degrees/10)*10,
+         num_of_activities_attended_group = floor(num_of_activities_attended/10)*10,
+         total_u_gifts_group = floor(total_u_gifts/100)*100,
+         average_u_gift_5_yr_group = floor(average_u_gift_5_yr/100)*100,
+         latest_u_gift_age_group = floor(as.numeric(ifelse(latest_u_gift_age=='NA',NA,latest_u_gift_age))/10)*10,
+         average_u_gift_group = floor(average_u_gift/100)*100,
+         years_latest_u_gift_group = floor(as.numeric(ifelse(years_latest_u_gift=='NA',NA,years_latest_u_gift))/10)*10,
+         years_earliest_u_gift_group = floor(as.numeric(ifelse(years_earliest_u_gift=='NA',NA,years_earliest_u_gift))/10)*10,
+         number_of_children,
+         number_u_contact_reports_5_yr,
+         num_of_acts_attended_5_yr,
+         has_any_gifts_by_credit_card = factor(has_any_gifts_by_credit_card),
+         has_phone_handling = factor(has_phone_handling),
+         parent_of_u_alum = factor(parent_of_u_alum),
+         child_of_u_alum = factor(child_of_u_alum),
+         total_u_gift_count_group = floor(total_u_gift_count/10)*10,
+         total_u_gift_count_5_yr_group = floor(total_u_gift_count_5_yr/10)*10) %>% 
+  select(pg_donor,
+         average_u_gift_group,
+         years_latest_u_gift_group,
+         years_earliest_u_gift_group,
+         number_of_children,
+         number_u_contact_reports_5_yr,
+         num_of_acts_attended_5_yr,
+         has_any_gifts_by_credit_card,
+         has_phone_handling,
+         latest_u_gift_age_group,
+         has_attended_student_act,
+         revieved_any_awards_honors,
+         former_uu_payroll_deduction,
+         sports_participation,
+         greek_participation,
+         has_made_phonathon_pledge,
+         has_attended_activities,
+         crimson_club_member_current,
+         crimson_club_member_ever,
+         presidents_club_current,
+         presidents_club_former,
+         any_committee_participation,
+         project_management_team,
+         age_group,
+         any_mailing_list,
+         marital_status_description,
+         both_entity_and_spouse_u_alum,
+         household_rating,
+         has_any_u_contact_reports,
+         number_u_contact_reports,
+         uu_years_of_giving_group,
+         has_direct_family_u_alum,
+         gender,
+         latest_u_gift_amount_group,
+         average_u_gift_5_yr_group,
+         record_type_1_primary,
+         degree_school_1,
+         number_of_u_degrees_group,
+         num_of_activities_attended_group,
+         total_u_gifts_group,
+         has_children,
+         address_sl25,
+         degree_department_1,
+         wpot_rating,
+         undergrad_degree,
+         masters_degree,
+         doctorate_degree,
+         has_multiple_properties,
+         has_direct_family_u_alum,
+         total_u_gift_count_group,
+         total_u_gift_count_5_yr_group,
+         num_of_student_acts_attended,
+         number_u_contact_reports_5_yr,
+         number_u_contact_reports_10_yr)
+
+data_2017_feed <- dummyVars(pg_donor~., data_2017_ready, fullRank = T) %>% 
+  predict(newdata=data_2017_ready)
+
+data_2017_feed <- preProcess(data_2017_feed, "medianImpute") %>% 
+  predict(newdata=data_2017_feed)
+
+data_2017_feed_a <- data.frame(data_2017_feed)
+
+data_2017_feed <- data_2017_feed[ ,-nzv(data_2017_feed)]
+
+data_2017_feed <- data.frame(data_2017_feed)
+
+data_2017_feed$pg_donor <- data_2017_ready$pg_donor
+data_2017_feed$number_of_children <- data_2017_feed_a$number_of_children
+data_2017_feed$number_u_contact_reports_5_yr <- data_2017_feed_a$number_u_contact_reports_5_yr
+data_2017_feed$greek_participation.1 <- data_2017_feed_a$greek_participation.1
+data_2017_feed$crimson_club_member_current.1 <- data_2017_feed_a$crimson_club_member_current.1
+data_2017_feed$crimson_club_member_ever.1 <- data_2017_feed_a$crimson_club_member_ever.1
+data_2017_feed$presidents_club_former.1 <- data_2017_feed_a$presidents_club_former.1
+data_2017_feed$any_committee_participation.1 <- data_2017_feed_a$any_committee_participation.1
+data_2017_feed$marital_status_description.Married <- data_2017_feed_a$marital_status_description.Married
+data_2017_feed$marital_status_description.Widowed <- data_2017_feed_a$marital_status_description.Widowed
+data_2017_feed$household_rating <- data_2017_ready$household_rating
+data_2017_feed$has_any_u_contact_reports.1 <- data_2017_feed_a$has_any_u_contact_reports.1
+data_2017_feed$uu_years_of_giving_group <- data_2017_feed_a$uu_years_of_giving_group
+data_2017_feed$average_u_gift_5_yr_group <- data_2017_feed_a$average_u_gift_5_yr_group
+data_2017_feed$degree_school_1Education <- data_2017_feed_a$degree_school_1Education
+data_2017_feed$degree_school_1Engineering <- data_2017_feed_a$degree_school_1Engineering
+data_2017_feed$degree_school_1Law <- data_2017_feed_a$degree_school_1Law
+data_2017_feed$degree_school_1Medicine <- data_2017_feed_a$degree_school_1Medicine
+data_2017_feed$degree_school_1Science <- data_2017_feed_a$degree_school_1Science
+data_2017_feed$degree_department_1Communication <- data_2017_feed_a$degree_department_1Communication
+data_2017_feed$degree_department_1Teaching.and.Learning <- data_2017_feed_a$degree_department_1Teaching.and.Learning
+data_2017_feed$doctorate_degree <- data_2017_feed_a$doctorate_degree
+data_2017_feed$has_multiple_properties.1 <- data_2017_feed_a$has_multiple_properties.1
+data_2017_feed$total_u_gift_count_group <- data_2017_feed_a$total_u_gift_count_group
+data_2017_feed$total_u_gift_count_5_yr_group <- data_2017_feed_a$total_u_gift_count_5_yr_group
+data_2017_feed$number_u_contact_reports_10_yr <- data_2017_feed_a$number_u_contact_reports_10_yr
+data_2017_feed$project_management_team.1 <- data_2017_feed_a$project_management_team.1
+data_2017_feed$num_of_activities_attended_group <- data_2017_feed_a$num_of_activities_attended_group
+data_2017_feed$number_u_contact_reports <- data_2017_feed_a$number_u_contact_reports
+glimpse(data_2017_feed)
+table(train_kev$household_rating)
+table(data_2017_feed$household_rating)
+data_2017_feed_b <- data_2017_feed %>% 
+  filter(household_rating>0)
+```
+
+## Extreme Imbalanced Class Proportion of PG Donor in 2018 dataset
+
+# Extremely Imbalanced Dataset vs Machine Learning Algorithms
+Because the number of Planned Giving donors in the 2018 dataset is extremely low (less than 1%) compared to the overall dataset and most Machine Learning Algorithms (Logistic, RF, GBM, etc) assume that the class proportion is relatively balanced, it is extremely necessary to balance the training dataset before building a model. Here we compare two popular methods/ techniques to balance the dataset, namely, UOS (Under/Over Sampling) & SMOTE (Sythetic Minority Oversampling Technique) before building predictive models.
+
+# UOS (Under/Over Sampling)
+As the name suggests, we balance the class proportion by reducing the number of the majority class (Non PG) through undersampling and increasing the number of the minority (PG) through oversampling. We use ROSE package to complete this task.
+
+# SMOTE (Synthetic Minority Oversampling Technique)
+This method is oversampling the minority class using KNN (K-Nearest Neighbor) principle. This is considered a more advanced technique than the UOS.
+
+# Machine Learning Models
+We use three different types of Machine Learning Algorithms, namely: Logistic Regression, Random Forest, and Gradient Boosting Machine. Because we will train each algorithm with 2 different training datasets (One from SMOTE, the other from UOS), we will have 6 different models. 
+
+# Creating Training Datasets and Training the Models
+I have completed all the necessary steps (Creating the datasets & Training the Models) so that we can now assess the performances of the models. 
+
+## Using 2017 Dataset to Measure the Models' Performances
+We use 2017 dataset as the Test dataset because it's a fresh dataset that the models have not seen and we already know the true labels of the PG Donor for each observation (row) in the dataset.
+
+# Logistic Regression on UOS Training Dataset
+```{r}
+# Logistic UOS
+pred_loguos_2017 <- predict(logistic_uos, data_2017_feed_b, type = "prob")
+colAUC(pred_loguos_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+# Logistic Regression on SMOTE Training Dataset
+```{r}
+# Logistic SMOTE
+pred_logsmt_2017 <- predict(logistic_smt, data_2017_feed_b, type = "prob")
+colAUC(pred_logsmt_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+# Random Forest on UOS Dataset
+```{r}
+# Random Forest UOS
+pred_rfuos_2017 <- predict(rf_uos, data_2017_feed_b, type = "prob")
+colAUC(pred_rfuos_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+# Random Forest on SMOTE Dataset
+```{r}
+# Random Forest SMOTE
+pred_rfsmt_2017 <- predict(rf_smt, data_2017_feed_b, type = "prob")
+colAUC(pred_rfsmt_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+# Gradient Boosting Machine on UOS Dataset
+```{r}
+# GBM UOS
+pred_gbmuos_2017 <- predict(gbm_uos, data_2017_feed_b, type = "prob")
+colAUC(pred_gbmuos_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+# Gradient Boosting Machine on SMOTE Dataset
+```{r}
+# GBM SMOTE
+pred_gbmsmt_2017 <- predict(gbm_smt, data_2017_feed_b, type = "prob")
+colAUC(pred_gbmsmt_2017, data_2017_feed_b$pg_donor, plotROC = T)
+```
+
+## Conclusion
+Of the 6 models above, the Gradient Boosting Machine (GBM) model trained using SMOTE technique has the highest ROC. Thus, it is best model we currently have on this documentation.
+
+## Appendix
+# Most Important Variables in the GBM model with SMOTE:
+```{r}
+summary(gbm_smt)
+```
+# Summary of the Logistic Model Using SMOTE
+```{r}
+summary(logistic_uos)
+varImp(logistic_uos)
+```
